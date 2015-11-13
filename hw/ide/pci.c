@@ -84,6 +84,8 @@ static int bmdma_prepare_buf(IDEDMA *dma, int is_write)
         }
         l = bm->cur_prd_len;
         if (l > 0) {
+            rr_set_dma_info(RR_DMA_SET_DATA, bm->cur_prd_addr, l,
+                            bm->cur_prd_last);
             qemu_sglist_add(&s->sg, bm->cur_prd_addr, l);
             bm->cur_prd_addr += l;
             bm->cur_prd_len -= l;
@@ -318,8 +320,12 @@ void bmdma_cmd_writeb(BMDMAState *bm, uint32_t val)
             if (!(bm->status & BM_STATUS_DMAING)) {
                 bm->status |= BM_STATUS_DMAING;
                 /* start dma transfer if possible */
-                if (bm->dma_cb)
+                if (bm->dma_cb) {
+                    if (bm->dma_cb == ide_dma_cb) {
+                        rr_set_dma_info(RR_DMA_START, 0, 0, 0);
+                    }
                     bm->dma_cb(bmdma_active_if(bm), 0);
+                }
             }
         }
     }

@@ -1998,3 +1998,55 @@ int kvm_on_sigbus(int code, void *addr)
 {
     return kvm_arch_on_sigbus(code, addr);
 }
+
+static void rr_set_dma_info_data(struct rr_dma_info *dma_info)
+{
+    dma_info->cmd = RR_DMA_SET_DATA;
+    kvm_vm_ioctl(kvm_state, KVM_DMA_COMMIT, dma_info);
+    dma_info->size = 0;
+}
+
+/* Record and replay */
+int rr_set_dma_info(int cmd, uint32_t addr, int len, bool last)
+{
+    static struct rr_dma_info dma_info;
+    uint32_t base;
+
+    switch (cmd) {
+    case RR_DMA_START:
+        dma_info.size = 0;
+        dma_info.cmd = RR_DMA_START;
+        kvm_vm_ioctl(kvm_state, KVM_DMA_COMMIT, &dma_info);
+        break;
+    case RR_DMA_FINISH:
+        if (dma_info.size != 0) {
+            rr_set_dma_info_data(&dma_info);
+        }
+        dma_info.cmd = RR_DMA_FINISH;
+        kvm_vm_ioctl(kvm_state, KVM_DMA_COMMIT, &dma_info);
+        break;
+    case RR_DMA_SET_DATA:
+        if (len <= 0) {
+            goto check_last;
+        }
+        len += addr & 0xfffUL;
+        base = addr >> 12;
+        while (len > 0) {
+            dma_info.gfn[dma_info.size++] = base;
+            ++base;
+            len -= PAGE_SIZE;
+            if (dma_info.size == RR_DMA_INFO_GFN_SIZE) {
+                rr_set_dma_info_data(&dma_info);
+            }
+        }
+check_last:
+        if (last && dma_info.size > 0) {
+            rr_set_dma_info_data(&dma_info);
+        }
+        break;
+    default:
+        printf("error: %s unknown cmd %d\n", __func__, cmd);
+    }
+    return 0;
+}
+

@@ -616,6 +616,7 @@ void ide_dma_cb(void *opaque, int ret)
     if (s->nsector == 0) {
         s->status = READY_STAT | SEEK_STAT;
         ide_set_irq(s->bus);
+        rr_set_dma_info(RR_DMA_FINISH, 0, 0, 0);
         goto eot;
     }
 
@@ -626,6 +627,8 @@ void ide_dma_cb(void *opaque, int ret)
     if (s->bus->dma->ops->prepare_buf(s->bus->dma, ide_cmd_is_read(s)) == 0) {
         /* The PRDs were too short. Reset the Active bit, but don't raise an
          * interrupt. */
+        printf("error: prepare_buf returns zero\n");
+        rr_set_dma_info(RR_DMA_FINISH, 0, 0, 0);
         goto eot;
     }
 

@@ -276,4 +276,10 @@ int kvm_irqchip_add_irqfd(KVMState *s, int fd, int virq);
 int kvm_irqchip_remove_irqfd(KVMState *s, int fd, int virq);
 int kvm_irqchip_add_irq_notifier(KVMState *s, EventNotifier *n, int virq);
 int kvm_irqchip_remove_irq_notifier(KVMState *s, EventNotifier *n, int virq);
+
+/* Record and replay */
+#define RR_DMA_START    0
+#define RR_DMA_FINISH   1
+#define RR_DMA_SET_DATA 2
+int rr_set_dma_info(int cmd, uint32_t addr, int len, bool last);
 #endif

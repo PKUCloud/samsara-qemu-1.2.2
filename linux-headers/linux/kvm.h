@@ -366,6 +366,14 @@ struct kvm_vapic_addr {
 	__u64 vapic_addr;
 };
 
+/* Record and replay */
+#define RR_DMA_INFO_GFN_SIZE 32
+struct rr_dma_info {
+    int cmd;
+    int size;
+    __u32 gfn[RR_DMA_INFO_GFN_SIZE];
+};
+
 /* for KVM_SET_MPSTATE */
 
 #define KVM_MP_STATE_RUNNABLE          0
@@ -769,6 +777,9 @@ struct kvm_msi {
 					struct kvm_userspace_memory_region)
 #define KVM_SET_TSS_ADDR          _IO(KVMIO,   0x47)
 #define KVM_SET_IDENTITY_MAP_ADDR _IOW(KVMIO,  0x48, __u64)
+
+/* Record and replay */
+#define KVM_DMA_COMMIT            _IOWR(KVMIO, 0x49, struct rr_dma_info)
 
 /* enable ucontrol for s390 */
 struct kvm_s390_ucas_mapping {
