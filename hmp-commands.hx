@@ -1481,3 +1481,23 @@ ETEXI
 STEXI
 @end table
 ETEXI
+
+    {
+        .name       = "record",
+        .args_type  = "enable:b,preempt_val:i?,log_name:s?",
+        .params     = "enable [preempt_val] [log_name]",
+        .help       = "enable samsara recording into log file 'log_name'"
+                      "('samsara.log' by default) with preemption timer value "
+                      "'preempt_val'(300000 by default) or disable samsara "
+                      "recording",
+        .mhandler.cmd = hmp_samsara_record,
+    },
+
+
+STEXI
+@item record @var{enable} [@var{preempt_val}] [@var{log_name}]
+@findex record
+Enable samsara recording into log file 'log_name' ('samsara.log' by default)
+with preemption timer value 'preempt_val'(300000 by default) or disable samsara
+recording.
+ETEXI

@@ -33,6 +33,7 @@
 #include "memory.h"
 #include "exec-memory.h"
 #include "event_notifier.h"
+#include "hmp.h"
 
 /* This check must be after config-host.h is included */
 #ifdef CONFIG_EVENTFD
@@ -2050,3 +2051,182 @@ check_last:
     return 0;
 }
 
+#define RR_DEFAULT_PREEMPTION_TIMER_VAL 300000
+#define RR_DEFAULT_LOG_FILE_NAME        "samsara.log"
+#define RR_LOGGER_DEV_NAME              "/dev/logger"
+#define RR_LOGGER_BUF_LEN               4096
+
+typedef struct RRLogThreadArg {
+    char dev_name[100];
+    char log_name[100];
+} RRLogThreadArg;
+
+static QemuThread log_thread;
+static RRLogThreadArg log_arg;
+
+static void *rr_log_to_file(void *opaque)
+{
+    RRLogThreadArg *arg = opaque;
+    const char *dev_name = arg->dev_name;
+    const char *log_name = arg->log_name;
+    FILE *f = NULL, *f_log = NULL;
+    unsigned long offset = 0, len = RR_LOGGER_BUF_LEN;
+    void *address = (void *)-1;
+    char *str;
+    int ret;
+    char buf[RR_LOGGER_BUF_LEN];
+
+    /* Open the file to map */
+    if (!(f = fopen(dev_name, "r"))) {
+        fprintf(stderr, "[SAMSARA]error: fail to open %s: %s\n", dev_name,
+                strerror(errno));
+        goto out;
+    }
+
+    /* Open the log file */
+    if (!(f_log = fopen(log_name, "w"))) {
+        fprintf(stderr, "[SAMSARA]error: fail to open log file %s: %s\n",
+                log_name, strerror(errno));
+        goto out;
+    }
+
+    printf("[SAMSARA]logging from %s into %s\n", dev_name, log_name);
+    while (1) {
+        /* mmap */
+        ret = fread(buf, 1, len, f);
+        if (ret != len) {
+            /* The dev has flushed the data */
+            if (feof(f)) {
+                /* Data are in @buf */
+                if (fwrite(buf, 1, ret, f_log) != ret) {
+                    fprintf(stderr, "[SAMSARA]error: fwrite() to %s fail: %s\n",
+                            log_name, strerror(errno));
+                    goto out;
+                }
+                /* Finish logging into file */
+                break;
+            } else {
+                fprintf(stderr, "[SAMSARA]error: fread() from %s fail: %s\n",
+                        dev_name, strerror(errno));
+                goto out;
+            }
+        }
+
+        /* mmap and read the data */
+        address = mmap(0, len, PROT_READ, MAP_LOCKED | MAP_SHARED, fileno(f),
+                       offset);
+        if (address == (void *)-1) {
+            fprintf(stderr, "[SAMSARA]error: mmap() %s fail: %s\n", dev_name,
+                    strerror(errno));
+            goto out;
+        }
+
+        /* Write the log into @log_name */
+        str = (char *)address;
+        if (fwrite(str, len, 1, f_log) != 1) {
+            fprintf(stderr, "[SAMSARA]error: fwrite() to %s fail: %s\n",
+                    log_name, strerror(errno));
+            goto out;
+        }
+
+        /* The driver will delete the data being mapped currently, so when we
+         * map the same address next time, it will actually be the next page.
+         */
+        munmap(address, len);
+        address = (void *)-1;
+    }
+
+    printf("[SAMSARA]log has been written into %s\n", log_name);
+out:
+    if (f) {
+        fclose(f);
+    }
+    if (f_log) {
+        fclose(f_log);
+    }
+    return 0;
+}
+
+/* @dev_name: the file name of the device to map
+ * @log_name: the name of the log file
+ */
+static void rr_start_logging(const char *dev_name, const char *log_name)
+{
+    sprintf(log_arg.dev_name, "%s", dev_name);
+    sprintf(log_arg.log_name, "%s", log_name);
+    qemu_thread_create(&log_thread, rr_log_to_file, &log_arg,
+                       QEMU_THREAD_JOINABLE);
+}
+
+static void rr_stop_logging(const char *dev_name)
+{
+    int fd_log;
+    int ret;
+
+    fd_log = open(dev_name, 0);
+    if (fd_log < 0) {
+        fprintf(stderr, "[SAMSARA]error: fail to open %s: %s\n", dev_name,
+                strerror(errno));
+        return;
+    }
+
+    ret = ioctl(fd_log, LOGGER_FLUSH);
+    if (ret < 0) {
+        fprintf(stderr, "[SAMSARA]error: fail to flush %s: %s\n", dev_name,
+                strerror(errno));
+    }
+
+    close(fd_log);
+    qemu_thread_join(&log_thread);
+    return;
+}
+
+void rr_record_handle_cmd(bool enable, int preempt_val, const char *log_name)
+{
+    struct kvm_rr_ctrl rr_ctrl;
+    int ret;
+    uint16_t rr_ctrl_mode, rr_ctrl_mem, rr_ctrl_kick;
+
+    memset(&rr_ctrl, 0, sizeof(rr_ctrl));
+
+    if (!enable) {
+        rr_ctrl.enabled = 0;
+        ret = kvm_ioctl(kvm_state, KVM_RR_CTRL, &rr_ctrl);
+        if (ret < 0) {
+            fprintf(stderr, "[SAMSARA]error: fail to disable recording: %s\n",
+                    strerror(errno));
+            return;
+        }
+        printf("[SAMSARA]record disabled\n");
+
+        qemu_mutex_unlock_iothread();
+        sleep(5);
+        rr_stop_logging(RR_LOGGER_DEV_NAME);
+        qemu_mutex_lock_iothread();
+        return;
+    }
+    if (preempt_val == -1) {
+        preempt_val = RR_DEFAULT_PREEMPTION_TIMER_VAL;
+    }
+    if (!log_name) {
+        log_name = RR_DEFAULT_LOG_FILE_NAME;
+    }
+
+    rr_ctrl_mem = KVM_RR_CTRL_MEM_EPT;
+    rr_ctrl_mode = KVM_RR_CTRL_MODE_ASYNC;
+    rr_ctrl_kick = KVM_RR_CTRL_KICK_PREEMPTION;
+
+    rr_ctrl.enabled = 1;
+    rr_ctrl.ctrl = rr_ctrl_mem | rr_ctrl_mode | rr_ctrl_kick;
+    rr_ctrl.timer_value = preempt_val;
+    ret = kvm_ioctl(kvm_state, KVM_RR_CTRL, &rr_ctrl);
+    if (ret < 0) {
+        fprintf(stderr, "[SAMSARA]error: fail to enable recording: %s\n",
+                strerror(errno));
+        return;
+    }
+    printf("[SAMSARA]record enabled: preempt_val=%d log_name=%s rr_ctrl=0x%x\n",
+           preempt_val, log_name, rr_ctrl.ctrl);
+
+    rr_start_logging(RR_LOGGER_DEV_NAME, log_name);
+}

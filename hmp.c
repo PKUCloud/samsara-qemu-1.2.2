@@ -1028,6 +1028,15 @@ void hmp_migrate(Monitor *mon, const QDict *qdict)
     }
 }
 
+void hmp_samsara_record(Monitor *mon, const QDict *qdict)
+{
+    bool enable = qdict_get_bool(qdict, "enable");
+    int preempt_val = qdict_get_try_int(qdict, "preempt_val", -1);
+    const char *log_name = qdict_get_try_str(qdict, "log_name");
+
+    rr_record_handle_cmd(enable, preempt_val, log_name);
+}
+
 void hmp_device_del(Monitor *mon, const QDict *qdict)
 {
     const char *id = qdict_get_str(qdict, "id");
