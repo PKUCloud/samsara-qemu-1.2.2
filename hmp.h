@@ -66,6 +66,7 @@ void hmp_block_job_set_speed(Monitor *mon, const QDict *qdict);
 void hmp_block_job_cancel(Monitor *mon, const QDict *qdict);
 void hmp_migrate(Monitor *mon, const QDict *qdict);
 void hmp_samsara_record(Monitor *mon, const QDict *qdict);
+void hmp_samsara_replay(Monitor *mon, const QDict *qdict);
 void hmp_device_del(Monitor *mon, const QDict *qdict);
 void hmp_dump_guest_memory(Monitor *mon, const QDict *qdict);
 void hmp_netdev_add(Monitor *mon, const QDict *qdict);
@@ -73,5 +74,6 @@ void hmp_netdev_del(Monitor *mon, const QDict *qdict);
 void hmp_getfd(Monitor *mon, const QDict *qdict);
 void hmp_closefd(Monitor *mon, const QDict *qdict);
 void rr_record_handle_cmd(bool enable, int preempt_val, const char *log_name);
+void rr_replay_handle_cmd(bool enable, const char *log_name);
 
 #endif

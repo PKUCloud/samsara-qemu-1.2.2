@@ -375,8 +375,11 @@ struct rr_dma_info {
 };
 
 /* Definitions for logger fd */
+#define LOGGER_STATE_INPUT      2
+
 #define LOGGER_IOC_MAGIC		0XAF
 #define LOGGER_FLUSH			_IO(LOGGER_IOC_MAGIC, 0)
+#define LOGGER_SET_STATE        _IO(LOGGER_IOC_MAGIC, 1)
 
 struct kvm_rr_ctrl {
     __u16 enabled;

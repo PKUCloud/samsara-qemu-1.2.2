@@ -1501,3 +1501,20 @@ Enable samsara recording into log file 'log_name' ('samsara.log' by default)
 with preemption timer value 'preempt_val'(300000 by default) or disable samsara
 recording.
 ETEXI
+
+    {
+        .name       = "replay",
+        .args_type  = "enable:b,log_name:s?",
+        .params     = "enable [log_name]",
+        .help       = "enable samsara replay from log file 'log_name'"
+                      "('samsara.log' by default) or disable samsara replay",
+        .mhandler.cmd = hmp_samsara_replay,
+    },
+
+
+STEXI
+@item replay @var{enable} [@var{log_name}]
+@findex replay
+Enable samsara replay from log file 'log_name' ('samsara.log' by default) or
+disable samsara replay.
+ETEXI
